@@ -1,0 +1,38 @@
+================================================================================
+DANTE FLORENS — ЗАПРОС РЕПОЗИТОРИЯ ДЛЯ НАКАТА ИНВАРИАНТОВ
+================================================================================
+Срез: 2026-11-13
+
+Готово к переносу (канон в audit-handoff/):
+  DANTE-FLORENS-DDL-W1-CONSENT-DEALS.sql
+  DANTE-FLORENS-API-W1-INVARIANTS.txt
+  DANTE-FLORENS-TZ-2.0-MODERNIZATION.txt
+  DANTE-FLORENS-CROSSMARKET-AUDIT.txt
+
+Локально сейчас открыт только salamproject — это НЕ платформа сети домов.
+Отдельного каталога платформы Данте Флоренс на диске пользователя
+(Desktop / Documents / Downloads / home) не найдено.
+
+Чтобы сразу перенести инварианты в миграции и контроллеры, пришлите одно из:
+
+1) Абсолютный путь к репо на диске, например:
+   C:\Users\...\dante-florens-platform
+
+2) Или URL + доступ (GitHub/GitLab), если репо приватное — клон/открытие
+   в Cursor.
+
+3) Или вставьте сюда текущие модели / схему:
+   - houses (поля, статусы)
+   - deals (поля, статусы)
+   - рассыльщик утра / morning batch / mailer
+   - дерево папок (backend/, prisma/, migrations/, …)
+
+После подключения будет сделано:
+  • миграция consent_logs + trigger immutable
+  • deals: amount_rub, status, fee trigger, CHECK
+  • view v_consent_current
+  • can_send_morning_letter + public STOP (двойной INSERT FALSE)
+  • POST /deals + /confirm + treasury_ledger
+  • вырезка сырого export contacts
+
+================================================================================

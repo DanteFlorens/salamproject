@@ -1,0 +1,16 @@
+services:
+  salam:
+    build: .
+    image: salam-residences:local
+    container_name: salam-residences
+    ports:
+      - "${PORT:-5173}:5173"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "5173"
+    volumes:
+      - salam-data:/app/data
+    restart: always
+
+volumes:
+  salam-data:

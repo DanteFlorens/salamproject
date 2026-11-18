@@ -1,0 +1,15 @@
+node_modules
+dist
+.tools
+.git
+.gitignore
+*.local
+.DS_Store
+data/*.sqlite
+data/*.sqlite-*
+audit-handoff
+tests
+*.md
+.cursor
+AgentTranscripts
+terminals
