@@ -1,8 +1,42 @@
-node_modules
-dist
-.tools
+# dependencies
+node_modules/
+
+# build / pack artifacts
+dist/
+Salam-Residences.html
+
+# local toolchain (bundled node, cloudflared, etc.)
+.tools/
+
+# env & local overrides (secrets)
+.env
+.env.*
+!.env.example
 *.local
-.DS_Store
+
+# runtime data
 data/*.sqlite
 data/*.sqlite-*
+data/*.db
+data/*.db-*
 !data/.gitkeep
+
+# caches / coverage / logs
+.vite
+.cache
+coverage
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
