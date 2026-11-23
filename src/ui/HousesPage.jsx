@@ -4,9 +4,12 @@ import {
   createHouse,
   currentHouseId,
   listHouses,
+  markUnremindedUtilityReminders,
   networkBrief,
   openFolios,
+  ownerDailyDigest,
   removeHouse,
+  setCurrentHouse,
   unitOf,
   units,
   withPersistNotice,
@@ -45,8 +48,34 @@ export function HousesPage() {
   const draft = viewHouseDraft(ui.houseDraft);
   const step = Math.min(3, Math.max(1, Number(ui.houseStep) || 1));
   const brief = networkBrief();
+  const digest = ownerDailyDigest();
   const preview = housePreview(draft.levels, Number(draft.parking) || 0);
   const stepTitle = ["Что за объект", "Этажи и помещения", "Название и адрес"][step - 1];
+
+  function openDigestHref(houseId, href) {
+    if (houseId) setCurrentHouse(houseId);
+    go(href, { retain: true, desk: href.includes("/apartments/") ? "money" : "overview" });
+  }
+
+  function remindUtilitiesToday() {
+    const count = digest.utilities.unremindedCount;
+    if (!count) {
+      patch({ notice: "Ненапомненной коммуналки на сегодня нет." });
+      return;
+    }
+    const ok = window.confirm(
+      `Отметить напоминания по ${ruCount(count, "студии", "студиям", "студиям")} с открытой коммуналкой? Деньги и оплаты не изменятся — только флаг «напомнили сегодня».`,
+    );
+    if (!ok) return;
+    const result = markUnremindedUtilityReminders();
+    patch({
+      notice: withPersistNotice(
+        result.count
+          ? `Напоминания отмечены: ${ruCount(result.count, "студия", "студии", "студий")}. Текст для жильцов — в доске дома, раздел коммуналки.`
+          : "Ненапомненной коммуналки не осталось.",
+      ),
+    });
+  }
 
   function saveDraft(partial, extra = {}) {
     patch({ houseDraft: { ...draft, ...partial }, ...extra });
@@ -170,6 +199,76 @@ export function HousesPage() {
           <span className="portfolio-label">Октябрь · приход</span>
           <strong>{formatMoney(brief.paid)}</strong>
           <span className="portfolio-sub">начислено {formatMoney(brief.charged)}</span>
+        </div>
+      </section>
+      <section className="owner-digest" aria-label="Брифинг владельца на сегодня">
+        <p className="kicker">На сегодня · {digest.asOf}</p>
+        <h2>Брифинг владельца</h2>
+        <p>{digest.headline}</p>
+        <div className="owner-digest-grid">
+          <div>
+            <span className="portfolio-label">Первые ходы</span>
+            {digest.priorities.length ? (
+              <ol className="moves owner-digest-moves">
+                {digest.priorities.map((row) => (
+                  <li key={`${row.houseId}-${row.move.id}`}>
+                    <button type="button" className="digest-link" onClick={() => openDigestHref(row.houseId, row.move.href)}>
+                      <span className="move-copy">
+                        <span>
+                          {row.houseName}: {row.move.title}
+                        </span>
+                        <span className="move-detail">{row.move.detail}</span>
+                      </span>
+                      {row.move.amount > 0 ? <strong>{formatMoney(row.move.amount)}</strong> : null}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="quiet">Открытых ходов нет.</p>
+            )}
+          </div>
+          <div>
+            <span className="portfolio-label">Коммуналка без напоминания</span>
+            <p className="owner-digest-stat">
+              {digest.utilities.unremindedCount ? (
+                <>
+                  <strong className="due">{formatMoney(digest.utilities.due)}</strong>
+                  <span className="quiet">
+                    {" "}
+                    · {ruCount(digest.utilities.unremindedCount, "студия ждёт", "студии ждут", "студий ждут")} текста
+                  </span>
+                </>
+              ) : (
+                <span className="quiet">Все с долгом уже отмечены на сегодня.</span>
+              )}
+            </p>
+            {digest.utilities.unremindedCount ? (
+              <button type="button" className="remind digest-batch" onClick={remindUtilitiesToday}>
+                Отметить напоминания всем
+              </button>
+            ) : null}
+            <span className="portfolio-label">Договоры ≤ 31 дня</span>
+            {digest.renewals.soonest ? (
+              <p className="quiet">
+                Ближе всего {digest.renewals.soonest.label} · через {digest.renewals.soonest.daysLeft} дн. · всего{" "}
+                {digest.renewals.count}
+              </p>
+            ) : (
+              <p className="quiet">Ближайших окончаний нет.</p>
+            )}
+            {digest.renewals.rows.length ? (
+              <ul className="owner-digest-renewals">
+                {digest.renewals.rows.map((row) => (
+                  <li key={row.stayId}>
+                    <button type="button" className="text-link" onClick={() => openDigestHref(row.houseId, row.href)}>
+                      {row.label} · {row.daysLeft} дн.
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </div>
       </section>
       <section className="section">

@@ -653,6 +653,24 @@ export function markReminder(stayId) {
   writeStore();
 }
 
+/** Отметить напоминания по всей открытой коммуналке за операционный день. Деньги не трогает. */
+export function markUnremindedUtilityReminders(asOf = AS_OF) {
+  const day = String(asOf || AS_OF);
+  const targets = utilityDebtors().filter((row) => row.remindedAt !== day);
+  if (!targets.length) return { count: 0, stayIds: [] };
+  beginPersist();
+  const stayIds = [];
+  for (const { stay } of targets) {
+    if (!stays.some((item) => item.id === stay.id)) continue;
+    if (!userReminders.some((item) => item.stayId === stay.id && item.at === day)) {
+      userReminders.push({ stayId: stay.id, at: day });
+    }
+    stayIds.push(stay.id);
+  }
+  writeStore();
+  return { count: stayIds.length, stayIds };
+}
+
 assertFund(NAMES.length === 35 && AREAS.length === 35, "ожидалось 35 студий");
 assertFund(units.length === 35 && parties.length === 35 && stays.length === 35, "фонд собран не полностью");
 assertFund(Math.min(...AREAS) === 18 && Math.max(...AREAS) === 35, "площади должны быть от 18 до 35");
@@ -2102,6 +2120,94 @@ export function networkBrief() {
     paid,
     due,
     fill: livingTotal ? Math.round((livingOccupied / livingTotal) * 100) : 0,
+  };
+}
+
+/**
+ * Утренний брифинг владельца: сеть + первые ходы по домам + ненапомненная коммуналка + сроки.
+ * Только чтение. Не пишет платежи и не трогает книги.
+ */
+export function ownerDailyDigest(asOf = AS_OF) {
+  const day = String(asOf || AS_OF);
+  const network = networkBrief();
+  const houses = listHouses();
+  const priorities = [];
+  for (const house of houses) {
+    const living = units.filter(
+      (unit) => (unit.houseId || SEED_HOUSE_ID) === house.id && unit.unitKind !== "parking",
+    );
+    if (!living.length) continue;
+    const picture = housePicture(living);
+    const move = picture.moves[0];
+    if (!move) continue;
+    priorities.push({
+      houseId: house.id,
+      houseName: house.name,
+      move: {
+        id: move.id,
+        title: move.title,
+        detail: move.detail,
+        amount: move.amount,
+        href: move.href,
+      },
+    });
+  }
+  priorities.sort(
+    (a, b) =>
+      (b.move.amount || 0) - (a.move.amount || 0) || a.houseName.localeCompare(b.houseName, "ru"),
+  );
+
+  const utilities = utilityDebtors();
+  const unreminded = utilities.filter((row) => row.remindedAt !== day);
+  const utilityDue = utilities.reduce((sum, row) => sum + row.due, 0);
+  const renewals = endingWithin(CONTRACT_SOON_DAYS).map((row) => {
+    const unit = unitOf(row.stay.unitId);
+    return {
+      stayId: row.stay.id,
+      code: unit.code,
+      label: faceCode(unit),
+      daysLeft: row.daysLeft,
+      houseId: unit.houseId || SEED_HOUSE_ID,
+      href: `/apartments/${unit.code}`,
+    };
+  });
+
+  const top = priorities[0] || null;
+  const headline = top
+    ? network.due > 0
+      ? `Долг сети ${network.due}. Первое дело — «${top.houseName}»: ${top.move.title.toLowerCase()}.`
+      : `Первое дело — «${top.houseName}»: ${top.move.title.toLowerCase()}, ${top.move.detail}.`
+    : network.due > 0
+      ? `Долг сети ${network.due}. Открытых ходов по домам сейчас нет.`
+      : "Сеть спокойна: открытых дыр по домам нет.";
+
+  return {
+    asOf: day,
+    headline,
+    network,
+    priorities: priorities.slice(0, 5),
+    topMove: top,
+    utilities: {
+      due: utilityDue,
+      count: utilities.length,
+      unremindedCount: unreminded.length,
+      top: unreminded.slice(0, 5).map((row) => {
+        const unit = unitOf(row.stay.unitId);
+        return {
+          stayId: row.stay.id,
+          code: unit.code,
+          label: faceCode(unit),
+          due: row.due,
+          houseId: unit.houseId || SEED_HOUSE_ID,
+          href: `/apartments/${unit.code}`,
+        };
+      }),
+    },
+    renewals: {
+      count: renewals.length,
+      soonest: renewals[0] || null,
+      rows: renewals.slice(0, 5),
+    },
   };
 }
 

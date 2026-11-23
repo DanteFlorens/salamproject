@@ -1324,15 +1324,23 @@ a.text-link {
   padding: 0;
 }
 
-.moves a {
+.moves a,
+.moves button.digest-link {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
+  width: 100%;
   padding: 12px 0;
+  border: 0;
   border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
   color: inherit;
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
+  font: inherit;
 }
 
 .moves strong {
@@ -1722,6 +1730,68 @@ a.text-link {
 .portfolio-sub {
   color: var(--muted);
   font-size: 13px;
+}
+
+.owner-digest {
+  margin: 0 0 28px;
+  padding: 22px 20px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.7), transparent 48%),
+    var(--card);
+  box-shadow: var(--shadow);
+}
+
+.owner-digest h2 {
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.owner-digest > p {
+  margin: 0 0 16px;
+}
+
+.owner-digest-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.8fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.owner-digest-moves {
+  margin-top: 6px;
+}
+
+.owner-digest-stat {
+  margin: 6px 0 12px;
+}
+
+.owner-digest .digest-batch {
+  margin: 0 0 18px;
+}
+
+.owner-digest-renewals {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.owner-digest .portfolio-label + .portfolio-label,
+.owner-digest .quiet + .portfolio-label {
+  display: block;
+  margin-top: 14px;
+}
+
+@media (max-width: 720px) {
+  .owner-digest-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .house-wizard {

@@ -4,6 +4,7 @@ import {
   housePicture,
   networkBrief,
   openFolios,
+  ownerDailyDigest,
   personById,
   rentDue,
   stays,
@@ -11,7 +12,7 @@ import {
 } from "../domain.js";
 
 const BLOCK_UNIT =
-  /долг|кто должен|задолжен|задач|поручен|все дома|вся сеть|по сети|по всем домам|сеть домов|(?:^|\s)сеть(?:\s|$)/;
+  /долг|кто должен|задолжен|задач|поручен|все дома|вся сеть|по сети|по всем домам|сеть домов|брифинг|что сегодня|на сегодня|сводка владельца|(?:^|\s)сеть(?:\s|$)/;
 
 function houseOf(unit) {
   return unit?.houseId || SEED_HOUSE_ID;
@@ -47,6 +48,30 @@ function residentOf(unit) {
 }
 
 export const tools = [
+  {
+    id: "owner.digest",
+    title: "Брифинг владельца",
+    roles: ["lead"],
+    examples: ["брифинг", "что сегодня"],
+    parse(text) {
+      if (
+        text === "брифинг" ||
+        /(?:^|\s)(?:брифинг|что сегодня|на сегодня|сводка владельца|день владельца)(?:\s|$)/.test(text)
+      ) {
+        return {};
+      }
+      return null;
+    },
+    run(_args, ctx) {
+      if (actor(ctx)?.role !== "lead") return { status: "forbidden", text: "Этого из вашего доступа не видно." };
+      const data = ownerDailyDigest();
+      return {
+        status: "ok",
+        text: data.headline,
+        data,
+      };
+    },
+  },
   {
     id: "network.brief",
     title: "Сеть домов",
