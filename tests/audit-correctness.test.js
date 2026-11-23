@@ -12,7 +12,7 @@ import {
   openDatabase,
   putKv,
   putKvBatch,
-} from "../db/sqlite.mjs";
+} from "../db/postgres.mjs";
 import {
   flushPersist,
   hydratePersist,
@@ -45,7 +45,7 @@ function installMemoryStorage() {
 }
 
 before(async () => {
-  openDatabase(dbFile);
+  await openDatabase(dbFile);
   server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port || 0}`);
     if (!(await handleApi(req, res, url))) {
@@ -64,9 +64,9 @@ before(async () => {
   };
 });
 
-after(() => {
+after(async () => {
   resetPersistForTests();
-  closeDatabase();
+  await closeDatabase();
   server.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -76,11 +76,11 @@ describe("correctness audit", () => {
     resetPersistForTests();
     memory.clear();
     installMemoryStorage();
-    closeDatabase();
+    await closeDatabase();
     fs.rmSync(dbFile, { force: true });
-    openDatabase(dbFile);
+    await openDatabase(dbFile);
 
-    putKv(
+    await putKv(
       "salam-residences-houses",
       {
         active: "h-keep",
@@ -99,7 +99,7 @@ describe("correctness audit", () => {
       houses: [{ id: "h-keep", name: "Keep", address: "1", serial: 1 }],
     });
     assert.equal(await flushPersist(), true);
-    const houses = getKv("salam-residences-houses").value.houses.map((h) => h.id).sort();
+    const houses = (await getKv("salam-residences-houses")).value.houses.map((h) => h.id).sort();
     assert.deepEqual(houses, ["h-keep"]);
   });
 
@@ -107,7 +107,7 @@ describe("correctness audit", () => {
     resetPersistForTests();
     memory.clear();
     installMemoryStorage();
-    putKv(
+    await putKv(
       "salam-residences-staff",
       {
         people: [
@@ -132,27 +132,27 @@ describe("correctness audit", () => {
       sessionId: "mgr-a",
     });
     assert.equal(await flushPersist(), true);
-    const staff = getKv("salam-residences-staff").value;
+    const staff = (await getKv("salam-residences-staff")).value;
     assert.equal(staff.people.length, 1);
     assert.equal(staff.people[0].id, "mgr-a");
     assert.equal(staff.accounts["mgr-b"], undefined);
   });
 
-  it("keeps both payments when two entity appends race-style", () => {
-    putKv(
+  it("keeps both payments when two entity appends race-style", async () => {
+    await putKv(
       "salam-residences-books",
       { payments: [], expenses: [], utilities: [], reminders: [] },
       { merge: false },
     );
-    appendPayment({ id: "pay-1", kind: "payment", amount: 100, at: "2026-10-01", stayId: "s1" });
-    appendPayment({ id: "pay-2", kind: "payment", amount: 200, at: "2026-10-02", stayId: "s2" });
-    const payments = getKv("salam-residences-books").value.payments;
+    await appendPayment({ id: "pay-1", kind: "payment", amount: 100, at: "2026-10-01", stayId: "s1" });
+    await appendPayment({ id: "pay-2", kind: "payment", amount: 200, at: "2026-10-02", stayId: "s2" });
+    const payments = (await getKv("salam-residences-books")).value.payments;
     assert.equal(payments.length, 2);
   });
 
   it("rejects invalid entity money and stale replace", async () => {
-    assert.throws(() => appendPayment({ id: "x", amount: 0, at: "2026-10-01" }), (e) => e.status === 400);
-    const rev = getKv("salam-residences-houses").revision;
+    await assert.rejects(async () => appendPayment({ id: "x", amount: 0, at: "2026-10-01" }), (e) => e.status === 400);
+    const rev = (await getKv("salam-residences-houses")).revision;
     const res = await fetch(`http://127.0.0.1:${port}/api/kv/salam-residences-houses`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -169,16 +169,16 @@ describe("correctness audit", () => {
     resetPersistForTests();
     memory.clear();
     installMemoryStorage();
-    closeDatabase();
+    await closeDatabase();
     fs.rmSync(dbFile, { force: true });
-    openDatabase(dbFile);
+    await openDatabase(dbFile);
 
-    putKv(
+    await putKv(
       "salam-residences-houses",
       { active: "h-salam", houses: [{ id: "h-server", name: "Server", serial: 1 }] },
       { merge: false },
     );
-    putKv(
+    await putKv(
       "salam-residences-books",
       {
         payments: [{ id: "p-server", kind: "payment", amount: 10, at: "2026-10-01", stayId: "s1" }],
@@ -191,12 +191,12 @@ describe("correctness audit", () => {
 
     await hydratePersist();
     // Сервер ушёл вперёд (другой клиент), локальные ревизии устарели.
-    putKv(
+    await putKv(
       "salam-residences-houses",
       { active: "h-salam", houses: [{ id: "h-server", name: "Server", serial: 1 }] },
       { merge: false },
     );
-    putKv(
+    await putKv(
       "salam-residences-books",
       {
         payments: [
@@ -223,9 +223,9 @@ describe("correctness audit", () => {
 
     assert.equal(await flushPersist(), true);
     assert.equal(persistHadConflict(), true);
-    const houses = getKv("salam-residences-houses").value.houses.map((h) => h.id);
+    const houses = (await getKv("salam-residences-houses")).value.houses.map((h) => h.id);
     assert.deepEqual(houses, ["h-server"]);
-    const payIds = getKv("salam-residences-books").value.payments.map((p) => p.id).sort();
+    const payIds = (await getKv("salam-residences-books")).value.payments.map((p) => p.id).sort();
     assert.ok(payIds.includes("p-server"));
     assert.ok(payIds.includes("p-other"));
     assert.ok(payIds.includes("p-local"));
@@ -254,22 +254,21 @@ describe("correctness audit", () => {
         },
       }),
     });
-    const tasks = getKv("salam-residences-tasks").value;
+    const tasks = (await getKv("salam-residences-tasks")).value;
     assert.deepEqual(tasks.status, { a: "closed" });
     assert.equal(tasks.status.b, undefined);
   });
 
-  it("batch stays atomic when one key is invalid", () => {
-    assert.throws(
-      () =>
-        putKvBatch({
+  it("batch stays atomic when one key is invalid", async () => {
+    await assert.rejects(async () =>
+      putKvBatch({
           "salam-residences-cards": { removed: [], added: [], edits: {} },
           "bad-key": {},
         }),
       /Unknown store key/,
     );
     // cards from this failed batch must not appear if they weren't there — use fresh probe id
-    const cards = getKv("salam-residences-cards");
+    const cards = await getKv("salam-residences-cards");
     if (cards) {
       assert.ok(cards.value);
     }

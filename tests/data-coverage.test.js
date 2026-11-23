@@ -15,7 +15,7 @@ import {
   listMoneyEvents,
   openDatabase,
   putKv,
-} from "../db/sqlite.mjs";
+} from "../db/postgres.mjs";
 import {
   STORE_KEYS as PERSIST_KEYS,
   flushPersist,
@@ -159,7 +159,7 @@ function fullFixture() {
 }
 
 before(async () => {
-  openDatabase(dbFile);
+  await openDatabase(dbFile);
   server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port || 0}`);
     if (!(await handleApi(req, res, url))) {
@@ -178,15 +178,15 @@ before(async () => {
   };
 });
 
-after(() => {
+after(async () => {
   resetPersistForTests();
-  closeDatabase();
+  await closeDatabase();
   server.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-describe("data coverage: old store → sqlite", () => {
-  it("domain, persist and sqlite share the exact same 5 keys", () => {
+describe("data coverage: old store → postgres", () => {
+  it("domain, persist and postgres share the exact same 5 keys", async () => {
     const domainKeys = domainKeysFromSource();
     assert.deepEqual(domainKeys, [...PERSIST_KEYS].sort());
     assert.deepEqual([...PERSIST_KEYS], [...SQLITE_KEYS]);
@@ -211,35 +211,35 @@ describe("data coverage: old store → sqlite", () => {
     const migrated = await hydratePersist();
     assert.equal(migrated.source, "migrated");
 
-    const snapshot = listKv();
+    const snapshot = await listKv();
     assert.deepEqual(Object.keys(snapshot.keys).sort(), Object.keys(fixture).sort());
     for (const key of PERSIST_KEYS) {
       assert.deepEqual(snapshot.keys[key], fixture[key], `loss in ${key}`);
     }
 
     // Проекции: дома и деньги вытащены; reminders остаются внутри kv JSON.
-    const houses = listHouses();
+    const houses = await listHouses();
     assert.ok(houses.some((h) => h.id === "h-salam"));
     assert.ok(houses.some((h) => h.id === "h-north" && h.active && h.parking === 3));
-    const money = listMoneyEvents();
+    const money = await listMoneyEvents();
     assert.equal(money.length, 3);
     assert.ok(money.some((e) => e.kind === "payment" && e.amount === 55000));
     assert.ok(money.some((e) => e.kind === "expense" && e.houseId === "h-north"));
     assert.ok(money.some((e) => e.kind === "utility"));
-    assert.deepEqual(getKv("salam-residences-books").value.reminders, fixture["salam-residences-books"].reminders);
-    assert.equal(getKv("salam-residences-staff").value.sessionId, "mgr-x");
-    assert.equal(getKv("salam-residences-tasks").value.created[0].id, "t-user-1");
-    assert.equal(getKv("salam-residences-cards").value.added[0].code, "801");
+    assert.deepEqual((await getKv("salam-residences-books")).value.reminders, fixture["salam-residences-books"].reminders);
+    assert.equal((await getKv("salam-residences-staff")).value.sessionId, "mgr-x");
+    assert.equal((await getKv("salam-residences-tasks")).value.created[0].id, "t-user-1");
+    assert.equal((await getKv("salam-residences-cards")).value.added[0].code, "801");
   });
 
   it("uploads local orphan keys when server already has a partial snapshot", async () => {
     resetPersistForTests();
     memory.clear();
     installMemoryStorage();
-    closeDatabase();
+    await closeDatabase();
     fs.rmSync(dbFile, { force: true });
-    openDatabase(dbFile);
-    putKv("salam-residences-books", {
+    await openDatabase(dbFile);
+    await putKv("salam-residences-books", {
       payments: [],
       expenses: [],
       utilities: [],
@@ -253,29 +253,29 @@ describe("data coverage: old store → sqlite", () => {
 
     const result = await hydratePersist();
     assert.equal(result.source, "server+orphans");
-    assert.equal(getKv("salam-residences-staff").value.sessionId, "lead");
-    assert.equal(getKv("salam-residences-tasks").value.status["t-1"], "read");
-    assert.ok(getKv("salam-residences-books"));
+    assert.equal((await getKv("salam-residences-staff")).value.sessionId, "lead");
+    assert.equal((await getKv("salam-residences-tasks")).value.status["t-1"], "read");
+    assert.ok(await getKv("salam-residences-books"));
   });
 
-  it("keeps live writes for every key in sqlite after flush", async () => {
+  it("keeps live writes for every key in postgres after flush", async () => {
     resetPersistForTests();
     memory.clear();
     installMemoryStorage();
-    closeDatabase();
+    await closeDatabase();
     fs.rmSync(dbFile, { force: true });
-    openDatabase(dbFile);
+    await openDatabase(dbFile);
     await hydratePersist();
     for (const key of PERSIST_KEYS) {
       persistWrite(key, { probe: key, at: "2026-10-26" });
     }
     assert.equal(await flushPersist(), true);
     for (const key of PERSIST_KEYS) {
-      assert.equal(getKv(key).value.probe, key);
+      assert.equal((await getKv(key)).value.probe, key);
     }
   });
 
-  it("documents seed fund that never lived in old localStorage and is still code-seed", () => {
+  it("documents seed fund that never lived in old localStorage and is still code-seed", async () => {
     const domain = fs.readFileSync(path.join(root, "src", "domain.js"), "utf8");
     // Учебный фонд и seed-* сущности собираются в JS, в localStorage их не было.
     assert.match(domain, /seedExpenses/);
@@ -284,7 +284,7 @@ describe("data coverage: old store → sqlite", () => {
     assert.match(domain, /const stays/);
     assert.match(domain, /const units/);
     // В SQLite нет таблиц units/stays/parties/tasks/staff — только kv + houses + money_events.
-    const schema = fs.readFileSync(path.join(root, "db", "sqlite.mjs"), "utf8");
+    const schema = fs.readFileSync(path.join(root, "db", "postgres.mjs"), "utf8");
     assert.match(schema, /CREATE TABLE IF NOT EXISTS kv/);
     assert.match(schema, /CREATE TABLE IF NOT EXISTS houses/);
     assert.match(schema, /CREATE TABLE IF NOT EXISTS money_events/);

@@ -12,7 +12,7 @@ import {
   listMoneyEvents,
   openDatabase,
   putKvBatch,
-} from "../db/sqlite.mjs";
+} from "../db/postgres.mjs";
 import {
   STORE_KEYS,
   flushPersist,
@@ -47,7 +47,7 @@ function installMemoryStorage() {
 }
 
 before(async () => {
-  openDatabase(dbFile);
+  await openDatabase(dbFile);
   server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port || 0}`);
     if (!(await handleApi(req, res, url))) {
@@ -66,15 +66,15 @@ before(async () => {
   };
 });
 
-after(() => {
+after(async () => {
   resetPersistForTests();
-  closeDatabase();
+  await closeDatabase();
   server.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe("persist reliability proof", () => {
-  it("migrates local cache into empty sqlite and reloads from server", async () => {
+  it("migrates local cache into empty postgres and reloads from server", async () => {
     resetPersistForTests();
     memory.clear();
     installMemoryStorage();
@@ -92,9 +92,9 @@ describe("persist reliability proof", () => {
 
     const migrated = await hydratePersist();
     assert.equal(migrated.source, "migrated");
-    assert.equal(getKv("salam-residences-books").value.payments[0].amount, 42000);
-    assert.ok(listHouses().some((house) => house.id === "h-north"));
-    assert.equal(listMoneyEvents({ kind: "payment" })[0].amount, 42000);
+    assert.equal((await getKv("salam-residences-books")).value.payments[0].amount, 42000);
+    assert.ok((await listHouses()).some((house) => house.id === "h-north"));
+    assert.equal((await listMoneyEvents({ kind: "payment" }))[0].amount, 42000);
 
     memory.clear();
     resetPersistForTests();
@@ -133,24 +133,23 @@ describe("persist reliability proof", () => {
     assert.equal(await firstFlush, true);
     if (persistPendingCount() > 0) assert.equal(await flushPersist(), true);
 
-    assert.equal(getKv("salam-residences-staff").value.sessionId, "second");
+    assert.equal((await getKv("salam-residences-staff")).value.sessionId, "second");
     assert.equal(persistPendingCount(), 0);
     globalThis.fetch = realFetch;
     void origin;
   });
 
-  it("rolls back atomic batch when one key is invalid", () => {
-    const before = listHouses().length;
-    assert.throws(
-      () =>
-        putKvBatch({
+  it("rolls back atomic batch when one key is invalid", async () => {
+    const before = (await listHouses()).length;
+    await assert.rejects(async () =>
+      putKvBatch({
           "salam-residences-cards": { removed: ["x"], added: [], edits: {} },
           "not-a-real-key": { nope: true },
         }),
       /Unknown store key/,
     );
-    assert.equal(getKv("salam-residences-cards"), null);
-    assert.equal(listHouses().length, before);
+    assert.equal(await getKv("salam-residences-cards"), null);
+    assert.equal((await listHouses()).length, before);
   });
 
   it("rejects bad json and unknown routes over http", async () => {
@@ -164,7 +163,7 @@ describe("persist reliability proof", () => {
     assert.equal(missing.status, 404);
     const health = await fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
     assert.equal(health.ok, true);
-    assert.equal(health.engine, "node:sqlite");
+    assert.equal(health.engine, "postgres");
   });
 
   it("surfaces flush error after server outage without losing local cache", async () => {
@@ -183,7 +182,7 @@ describe("persist reliability proof", () => {
     assert.ok(persistPendingCount() >= 1);
     globalThis.fetch = realFetch;
     assert.equal(await flushPersist(), true);
-    assert.equal(getKv("salam-residences-tasks").value.status["t-1"], "closed");
+    assert.equal((await getKv("salam-residences-tasks")).value.status["t-1"], "closed");
     assert.equal(persistPendingCount(), 0);
     void origin;
     void STORE_KEYS;

@@ -15,7 +15,7 @@ import {
   putKvBatch,
   setActiveHouse,
   upsertHouseSpec,
-} from "../db/sqlite.mjs";
+} from "../db/postgres.mjs";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "salam-scale-"));
 const dbFile = path.join(tmpDir, "scale.sqlite");
@@ -23,7 +23,7 @@ let server;
 let port;
 
 before(async () => {
-  openDatabase(dbFile);
+  await openDatabase(dbFile);
   server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port || 0}`);
     if (!(await handleApi(req, res, url))) {
@@ -35,15 +35,15 @@ before(async () => {
   port = server.address().port;
 });
 
-after(() => {
-  closeDatabase();
+after(async () => {
+  await closeDatabase();
   server.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe("slight scale: merge + revisions + entity ops", () => {
-  it("merges two concurrent book writes without losing payments", () => {
-    putKv(
+  it("merges two concurrent book writes without losing payments", async () => {
+    await putKv(
       "salam-residences-books",
       {
         payments: [{ id: "p-a", kind: "payment", amount: 1000, at: "2026-10-01", stayId: "s1" }],
@@ -53,7 +53,7 @@ describe("slight scale: merge + revisions + entity ops", () => {
       },
       { merge: false },
     );
-    putKvBatch(
+    await putKvBatch(
       {
         "salam-residences-books": {
           payments: [{ id: "p-b", kind: "payment", amount: 2000, at: "2026-10-02", stayId: "s2" }],
@@ -64,18 +64,18 @@ describe("slight scale: merge + revisions + entity ops", () => {
       },
       { merge: true },
     );
-    const books = getKv("salam-residences-books").value;
+    const books = (await getKv("salam-residences-books")).value;
     assert.equal(books.payments.length, 2);
     assert.ok(books.payments.some((p) => p.id === "p-a"));
     assert.ok(books.payments.some((p) => p.id === "p-b"));
     assert.equal(books.expenses[0].id, "x-1");
-    assert.ok(getKv("salam-residences-books").revision >= 2);
+    assert.ok((await getKv("salam-residences-books")).revision >= 2);
   });
 
-  it("rejects stale replace with 409 but allows merge", () => {
-    const rev = getKv("salam-residences-books").revision;
-    assert.throws(
-      () =>
+  it("rejects stale replace with 409 but allows merge", async () => {
+    const rev = (await getKv("salam-residences-books")).revision;
+    await assert.rejects(
+      async () =>
         putKv(
           "salam-residences-books",
           { payments: [], expenses: [], utilities: [], reminders: [] },
@@ -83,7 +83,7 @@ describe("slight scale: merge + revisions + entity ops", () => {
         ),
       (error) => error.status === 409,
     );
-    const saved = putKv(
+    const saved = await putKv(
       "salam-residences-books",
       {
         payments: [{ id: "p-c", kind: "payment", amount: 3000, at: "2026-10-04", stayId: "s3" }],
@@ -97,15 +97,15 @@ describe("slight scale: merge + revisions + entity ops", () => {
     assert.ok(saved.value.payments.some((p) => p.id === "p-c"));
   });
 
-  it("entity ops append money and upsert houses", () => {
-    appendPayment({ id: "p-ops", kind: "payment", amount: 7777, at: "2026-10-05", stayId: "s9" });
-    appendExpense({ id: "x-ops", label: "Ops", amount: 111, at: "2026-10-05", houseId: "h-salam" });
-    upsertHouseSpec({ id: "h-scale", name: "Scale House", address: "1", serial: 8, parking: 1 });
-    setActiveHouse("h-scale");
-    const books = getKv("salam-residences-books").value;
+  it("entity ops append money and upsert houses", async () => {
+    await appendPayment({ id: "p-ops", kind: "payment", amount: 7777, at: "2026-10-05", stayId: "s9" });
+    await appendExpense({ id: "x-ops", label: "Ops", amount: 111, at: "2026-10-05", houseId: "h-salam" });
+    await upsertHouseSpec({ id: "h-scale", name: "Scale House", address: "1", serial: 8, parking: 1 });
+    await setActiveHouse("h-scale");
+    const books = (await getKv("salam-residences-books")).value;
     assert.ok(books.payments.some((p) => p.id === "p-ops"));
     assert.ok(books.expenses.some((e) => e.id === "x-ops"));
-    const houses = getKv("salam-residences-houses").value;
+    const houses = (await getKv("salam-residences-houses")).value;
     assert.equal(houses.active, "h-scale");
     assert.ok(houses.houses.some((h) => h.id === "h-scale"));
   });

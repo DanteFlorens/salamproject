@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { getKv } from "./sqlite.mjs";
+import { getKv } from "./postgres.mjs";
 import { DEMO_PIN, SEED_HOUSE_ID, SEED_STAFF, buildSeedCatalog } from "./seed-catalog.mjs";
 
 const FONT_REGULAR = fileURLToPath(new URL("./fonts/Roboto-Regular.ttf", import.meta.url));
@@ -53,8 +53,8 @@ function formatDateRu(iso) {
   return `${d} ${months[m - 1]} ${y}`;
 }
 
-function readKvValue(key) {
-  const row = getKv(key);
+async function readKvValue(key) {
+  const row = await getKv(key);
   return row?.value && typeof row.value === "object" ? row.value : null;
 }
 
@@ -103,7 +103,7 @@ function cardToContext(card, house) {
 /**
  * Собирает контекст договора: seed + cards + houses (+ books для залога).
  */
-export function resolveContractContext(unitCode) {
+export async function resolveContractContext(unitCode) {
   const code = String(unitCode || "").trim();
   if (!code) {
     const error = new Error("Не указан код студии");
@@ -111,9 +111,9 @@ export function resolveContractContext(unitCode) {
     throw error;
   }
 
-  const housesStore = readKvValue("salam-residences-houses") || {};
-  const cards = readKvValue("salam-residences-cards") || { removed: [], added: [], edits: {} };
-  const books = readKvValue("salam-residences-books") || {};
+  const housesStore = (await readKvValue("salam-residences-houses")) || {};
+  const cards = (await readKvValue("salam-residences-cards")) || { removed: [], added: [], edits: {} };
+  const books = (await readKvValue("salam-residences-books")) || {};
 
   const houseList = Array.isArray(housesStore.houses) ? housesStore.houses : [];
   const defaultHouse = {
@@ -296,7 +296,7 @@ export function writeContractPdf(doc, ctx) {
 }
 
 /** Проверка PIN сотрудника по KV + seed. */
-export function verifyStaffPin({ staffId, pin, role }) {
+export async function verifyStaffPin({ staffId, pin, role }) {
   const id = String(staffId || "").trim();
   const pinClean = String(pin || "").trim();
   if (!id || !/^\d{4}$/.test(pinClean)) {
@@ -305,7 +305,7 @@ export function verifyStaffPin({ staffId, pin, role }) {
     throw error;
   }
 
-  const store = readKvValue("salam-residences-staff") || {};
+  const store = (await readKvValue("salam-residences-staff")) || {};
   const accounts = store.accounts && typeof store.accounts === "object" ? { ...store.accounts } : {};
   for (const person of SEED_STAFF) {
     if (!accounts[person.id]) {

@@ -12,11 +12,14 @@
     "test:watch": "node --test --watch tests/**/*.test.js",
     "start": "node server.mjs",
     "legacy": "node server.mjs",
-    "db:health": "node -e \"import('./db/sqlite.mjs').then(m=>{m.openDatabase();console.log(JSON.stringify(m.health(),null,2));})\"",
+    "db:up": "docker compose up -d db",
+    "db:health": "node -e \"import('./db/postgres.mjs').then(async m=>{await m.openDatabase();console.log(JSON.stringify(await m.health(),null,2));await m.closeDatabase();})\"",
+    "db:migrate:sqlite": "node scripts/migrate-sqlite-to-postgres.mjs",
     "check": "node --test tests/**/*.test.js && vite build && node pack.mjs"
   },
   "dependencies": {
     "pdfkit": "^0.20.2",
+    "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

@@ -1,16 +1,36 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: salam-postgres
+    environment:
+      POSTGRES_USER: salam
+      POSTGRES_PASSWORD: salam
+      POSTGRES_DB: salam
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - salam-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salam -d salam"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   salam:
     build: .
     image: salam-residences:local
     container_name: salam-residences
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "${PORT:-5173}:5173"
     environment:
       HOST: "0.0.0.0"
       PORT: "5173"
-    volumes:
-      - salam-data:/app/data
+      DATABASE_URL: "postgresql://salam:salam@db:5432/salam"
     restart: always
 
 volumes:
-  salam-data:
+  salam-pg:

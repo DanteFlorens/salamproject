@@ -1,4 +1,4 @@
-/** Клиентский слой: SQLite на сервере — источник правды, localStorage — кэш. */
+/** Клиентский слой: Postgres на сервере — источник правды, localStorage — кэш. */
 
 import { mergeStoreValue } from "../db/merge.mjs";
 

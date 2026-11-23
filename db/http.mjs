@@ -12,7 +12,7 @@ import {
   putKvBatch,
   setActiveHouse,
   upsertHouseSpec,
-} from "./sqlite.mjs";
+} from "./postgres.mjs";
 import {
   createContractDocument,
   resolveContractContext,
@@ -125,13 +125,13 @@ export async function handleApi(req, res, url) {
 
   try {
     if (pathname === "/api/health" && req.method === "GET") {
-      sendJson(res, 200, health());
+      sendJson(res, 200, await health());
       return true;
     }
 
     if (pathname === "/api/auth/session" && req.method === "POST") {
       const body = await readBody(req);
-      const person = verifyStaffPin({
+      const person = await verifyStaffPin({
         staffId: body?.staffId || body?.id,
         pin: body?.pin,
         role: body?.role,
@@ -162,7 +162,7 @@ export async function handleApi(req, res, url) {
       const unitCode = decodeURIComponent(pdfContract[1]);
       let ctx;
       try {
-        ctx = resolveContractContext(unitCode);
+        ctx = await resolveContractContext(unitCode);
       } catch (error) {
         const status = Number(error?.status) || 500;
         sendJson(res, status, { error: error?.message || "Не удалось собрать договор" });
@@ -200,7 +200,7 @@ export async function handleApi(req, res, url) {
     }
 
     if (pathname === "/api/kv" && req.method === "GET") {
-      sendJson(res, 200, { ...listKv(), keysList: STORE_KEYS });
+      sendJson(res, 200, { ...(await listKv()), keysList: STORE_KEYS });
       return true;
     }
 
@@ -211,7 +211,7 @@ export async function handleApi(req, res, url) {
         sendJson(res, 400, { error: "Expected object of store keys" });
         return true;
       }
-      const saved = putKvBatch(entries, {
+      const saved = await putKvBatch(entries, {
         // По умолчанию replace: полный снимок domain не должен воскрешать удаления через merge.
         merge: body?.merge === true,
         revisions: body?.revisions,
@@ -228,7 +228,7 @@ export async function handleApi(req, res, url) {
     if (kvMatch) {
       const key = decodeURIComponent(kvMatch[1]);
       if (req.method === "GET") {
-        const row = getKv(key);
+        const row = await getKv(key);
         if (!row) {
           sendJson(res, 404, { error: "missing", key });
           return true;
@@ -239,7 +239,7 @@ export async function handleApi(req, res, url) {
       if (req.method === "PUT" || req.method === "POST") {
         const body = await readBody(req);
         const value = body && Object.prototype.hasOwnProperty.call(body, "value") ? body.value : body;
-        const saved = putKv(key, value, {
+        const saved = await putKv(key, value, {
           merge: body?.merge === true,
           expectedRevision: body?.revision ?? body?.expectedRevision,
         });
@@ -249,13 +249,13 @@ export async function handleApi(req, res, url) {
     }
 
     if (pathname === "/api/houses" && req.method === "GET") {
-      sendJson(res, 200, { houses: listHouses() });
+      sendJson(res, 200, { houses: await listHouses() });
       return true;
     }
 
     if (pathname === "/api/money" && req.method === "GET") {
       sendJson(res, 200, {
-        events: listMoneyEvents({
+        events: await listMoneyEvents({
           houseId: url.searchParams.get("houseId") || undefined,
           kind: url.searchParams.get("kind") || undefined,
           limit: url.searchParams.get("limit") || 200,
@@ -267,7 +267,7 @@ export async function handleApi(req, res, url) {
     if (pathname === "/api/ops/payment" && req.method === "POST") {
       const body = await readBody(req);
       const payment = body?.payment || body;
-      const saved = appendPayment(payment);
+      const saved = await appendPayment(payment);
       sendJson(res, 200, { ok: true, ...saved });
       return true;
     }
@@ -275,7 +275,7 @@ export async function handleApi(req, res, url) {
     if (pathname === "/api/ops/expense" && req.method === "POST") {
       const body = await readBody(req);
       const expense = body?.expense || body;
-      const saved = appendExpense(expense);
+      const saved = await appendExpense(expense);
       sendJson(res, 200, { ok: true, ...saved });
       return true;
     }
@@ -283,14 +283,14 @@ export async function handleApi(req, res, url) {
     if (pathname === "/api/ops/house" && req.method === "POST") {
       const body = await readBody(req);
       const house = body?.house || body;
-      const saved = upsertHouseSpec(house, body?.active);
+      const saved = await upsertHouseSpec(house, body?.active);
       sendJson(res, 200, { ok: true, ...saved });
       return true;
     }
 
     if (pathname === "/api/ops/house/active" && (req.method === "PUT" || req.method === "POST")) {
       const body = await readBody(req);
-      const saved = setActiveHouse(body?.id || body?.active);
+      const saved = await setActiveHouse(body?.id || body?.active);
       sendJson(res, 200, { ok: true, ...saved });
       return true;
     }

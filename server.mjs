@@ -2,7 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { openDatabase } from "./db/sqlite.mjs";
+import { openDatabase } from "./db/postgres.mjs";
 import { handleApi } from "./db/http.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -25,7 +25,7 @@ function fileFor(urlPath) {
   return resolved;
 }
 
-openDatabase();
+await openDatabase();
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");

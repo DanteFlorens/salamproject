@@ -1,4 +1,4 @@
-# Node 24: нужен встроенный node:sqlite
+# Node 24 + pg client (Postgres снаружи / в compose)
 FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
@@ -20,6 +20,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=5173
+ENV DATABASE_URL=postgresql://salam:salam@db:5432/salam
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

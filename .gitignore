@@ -19,6 +19,7 @@ data/*.sqlite
 data/*.sqlite-*
 data/*.db
 data/*.db-*
+data/*.pgmarker
 !data/.gitkeep
 
 # caches / coverage / logs
